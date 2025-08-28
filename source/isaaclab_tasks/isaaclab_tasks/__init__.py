@@ -24,8 +24,10 @@ __version__ = ISAACLAB_TASKS_METADATA["package"]["version"]
 
 from .utils import import_packages
 
-# The blacklist is used to prevent importing configs from sub-packages
-# TODO(@ashwinvk): Remove pick_place from the blacklist once pinocchio from Isaac Sim is compatibility
-_BLACKLIST_PKGS = ["utils", ".mdp", "pick_place"]
-# Import all configs in this package
+# Import our simplified G1 task configuration
+from .g1_rough_terrain_task import *
+
+# The blacklist is used to prevent importing configs from sub-packages  
+_BLACKLIST_PKGS = ["utils", "mdp", "manager_based"]
+# Import remaining configs (if any)
 import_packages(__name__, _BLACKLIST_PKGS)
