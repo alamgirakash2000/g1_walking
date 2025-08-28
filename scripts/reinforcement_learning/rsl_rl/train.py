@@ -94,8 +94,7 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils import get_checkpoint_path
-from isaaclab_tasks.utils.hydra import hydra_task_config
+from isaaclab_tasks.g1_utils import get_checkpoint_path, hydra_task_config
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 

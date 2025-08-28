@@ -68,7 +68,7 @@ if args_cli.enable_pinocchio:
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
 import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
+from isaaclab_tasks.g1_utils import parse_env_cfg
 
 is_paused = False
 

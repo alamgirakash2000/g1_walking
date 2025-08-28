@@ -107,7 +107,7 @@ from isaaclab.envs.ui import EmptyWindow
 from isaaclab.managers import DatasetExportMode
 
 import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
+from isaaclab_tasks.g1_utils import parse_env_cfg
 
 
 class RateLimiter:
@@ -179,7 +179,7 @@ def create_environment_config(
         output_file_name: Name of the file to store the demonstrations
 
     Returns:
-        tuple[isaaclab_tasks.utils.parse_cfg.EnvCfg, Optional[object]]: A tuple containing:
+        tuple[isaaclab_tasks.g1_utils.EnvCfg, Optional[object]]: A tuple containing:
             - env_cfg: The configured environment configuration
             - success_term: The success termination object or None if not available
 

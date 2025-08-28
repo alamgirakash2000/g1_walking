@@ -22,7 +22,8 @@ __version__ = ISAACLAB_TASKS_METADATA["package"]["version"]
 # Register Gym environments.
 ##
 
-from .utils import import_packages
+# Import utilities from our consolidated file
+from .g1_utils import import_packages
 
 # Import our simplified G1 task configuration
 from .g1_rough_terrain_task import *
