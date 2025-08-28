@@ -1,27 +1,34 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Common functions that can be used to define rewards for the learning environment.
+"""MDP functions for G1 rough terrain walking task.
 
-The functions can be passed to the :class:`isaaclab.managers.RewardTermCfg` object to
-specify the reward function and its parameters.
+This file contains all the reward, termination, and curriculum functions
+needed for the G1 humanoid robot walking task.
 """
 
 from __future__ import annotations
 
 import torch
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+from isaaclab.assets import Articulation, RigidObject
 from isaaclab.envs import mdp
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor
+from isaaclab.terrains import TerrainImporter
 from isaaclab.utils.math import quat_apply_inverse, yaw_quat
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
+
+# =============================================================================
+# REWARD FUNCTIONS
+# =============================================================================
 
 def feet_air_time(
     env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg, threshold: float
@@ -114,3 +121,75 @@ def stand_still_joint_deviation_l1(
     command = env.command_manager.get_command(command_name)
     # Penalize motion when command is nearly zero.
     return mdp.joint_deviation_l1(env, asset_cfg) * (torch.norm(command[:, :2], dim=1) < command_threshold)
+
+
+# =============================================================================
+# TERMINATION FUNCTIONS
+# =============================================================================
+
+def terrain_out_of_bounds(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), distance_buffer: float = 3.0
+) -> torch.Tensor:
+    """Terminate when the actor move too close to the edge of the terrain.
+
+    If the actor moves too close to the edge of the terrain, the termination is activated. The distance
+    to the edge of the terrain is calculated based on the size of the terrain and the distance buffer.
+    """
+    if env.scene.cfg.terrain.terrain_type == "plane":
+        # we have infinite terrain because it is a plane
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    elif env.scene.cfg.terrain.terrain_type == "generator":
+        # obtain the size of the sub-terrains
+        terrain_gen_cfg = env.scene.terrain.cfg.terrain_generator
+        grid_width, grid_length = terrain_gen_cfg.size
+        n_rows, n_cols = terrain_gen_cfg.num_rows, terrain_gen_cfg.num_cols
+        border_width = terrain_gen_cfg.border_width
+        # compute the size of the map
+        map_width = n_rows * grid_width + 2 * border_width
+        map_height = n_cols * grid_length + 2 * border_width
+
+        # extract the used quantities (to enable type-hinting)
+        asset: RigidObject = env.scene[asset_cfg.name]
+
+        # check if the agent is out of bounds
+        x_out_of_bounds = torch.abs(asset.data.root_pos_w[:, 0]) > 0.5 * map_width - distance_buffer
+        y_out_of_bounds = torch.abs(asset.data.root_pos_w[:, 1]) > 0.5 * map_height - distance_buffer
+        return torch.logical_or(x_out_of_bounds, y_out_of_bounds)
+    else:
+        raise ValueError("Received unsupported terrain type, must be either 'plane' or 'generator'.")
+
+
+# =============================================================================
+# CURRICULUM FUNCTIONS  
+# =============================================================================
+
+def terrain_levels_vel(
+    env: ManagerBasedRLEnv, env_ids: Sequence[int], asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Curriculum based on the distance the robot walked when commanded to move at a desired velocity.
+
+    This term is used to increase the difficulty of the terrain when the robot walks far enough and decrease the
+    difficulty when the robot walks less than half of the distance required by the commanded velocity.
+
+    .. note::
+        It is only possible to use this term with the terrain type ``generator``. For further information
+        on different terrain types, check the :class:`isaaclab.terrains.TerrainImporter` class.
+
+    Returns:
+        The mean terrain level for the given environment ids.
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    terrain: TerrainImporter = env.scene.terrain
+    command = env.command_manager.get_command("base_velocity")
+    # compute the distance the robot walked
+    distance = torch.norm(asset.data.root_pos_w[env_ids, :2] - env.scene.env_origins[env_ids, :2], dim=1)
+    # robots that walked far enough progress to harder terrains
+    move_up = distance > terrain.cfg.terrain_generator.size[0] / 2
+    # robots that walked less than half of their required distance go to simpler terrains
+    move_down = distance < torch.norm(command[env_ids, :2], dim=1) * env.max_episode_length_s * 0.5
+    move_down *= ~move_up
+    # update terrain levels
+    terrain.update_env_origins(env_ids, move_up, move_down)
+    # return the mean terrain level
+    return torch.mean(terrain.terrain_levels.float())
